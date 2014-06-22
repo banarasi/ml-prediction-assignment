@@ -1,0 +1,149 @@
+
+### Predict the manner in which subject did the exercise
+
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+```{r loadData, echo=FALSE}
+
+setwd("C:\\Users\\BANARASI\\Dropbox\\R\\ml-project")
+library(caret)
+#Loading data
+pmlTraining<-read.csv("pml-training.csv")
+pmlTesting<-read.csv("pml-testing.csv")
+```
+
+
+
+
+#### Data collection: 
+
+##### Data 
+
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+
+
+### 
+
+The function createDataPartition used to create a stratified random splits of the data set.  In this case 70% of the data will be used for model training and remainder will be used for evaluating model performance and also to report the out of sample error. This data was not used in the process of traing the model, so the reported out of sample error using this data can be considered as near to accurate.
+
+The function creates the random splits within each class so that the overall class distribution is preserved as well as possible. 
+
+```{r datapartition}
+# Data partition into traing and cross vaidation
+inTrain = createDataPartition(pmlTraining$classe, p = .7, list=FALSE)
+pmlTrain = pmlTraining[ inTrain,]
+pmlTest = pmlTraining[-inTrain,]
+
+dim(pmlTrain)
+```
+
+### Preprocessing
+
+
+```{r preProcess }
+# Dummy variables, remove near zero variance variables
+nsv<-nearZeroVar(pmlTrain)
+trainData<-pmlTrain[,-nsv]
+
+# discard columns with most NAs
+NAs <- apply(trainData,2,function(x) {sum(is.na(x))}) 
+trainData <- trainData[,which(NAs == 0)]
+
+# discards unuseful predictors
+removeIndex <- grep("timestamp|X|user_name|new_window|num_window",names(trainData))
+trainData <- trainData[,-removeIndex]
+
+```
+
+
+#### Building and Model Selection
+
+##### Basic Parameter Tuning
+
+By default, simple bootstrap resampling is used the algorithm above. The function trainControl used to specifiy the algorithm to use cross validation to select the final model.
+
+
+```{r paramTuning}
+
+fitControl<-trainControl(method = "cv", number = 4,allowParallel=TRUE )
+
+```
+
+
+##### Model creation
+
+Choose to build and compare Recursive Partitioning and Radom Forests models.
+
+```{r modelCreation}
+
+rpartmodelFit<- train(trainData$classe ~ ., data=trainData, method="rpart", trControl=fitControl)
+rfmodelFit <- train(trainData$classe ~ ., data=trainData, method="rf", trControl=fitControl)
+
+```
+
+
+##### Model Selection
+
+Used different methods to compare the two models. 
+
+```{r modelComparision}
+
+confusionMatrix(pmlTest$classe, predict(rpartmodelFit, pmlTest))
+confusionMatrix(pmlTest$classe, predict(rfmodelFit, pmlTest))
+
+plot(rfmodelFit)
+plot(rpartmodelFit)
+
+
+resamps <- resamples(list(RPART = rpartmodelFit,
+                          rf = rfmodelFit
+                          ))
+summary(resamps)
+
+```
+
+Random Forest achieved 99% percent accuracy on the test data, which will be selected and used to predict the 20 different test cases.
+
+```{r ooer}
+
+## Calculate the out of sample error
+ooer<- 1 - ( sum( predict(rfmodelFit, pmlTest) == pmlTest$classe) / nrow(pmlTest) )
+
+
+```
+
+<b> Expected out of sample error is `r ooer`. </b> 
+
+### Prediction of Test samples
+
+Rsulats of Prediction of 20 provided test cases.
+
+```{r prdiction}
+
+answers = rep("A", 20)
+answers<-predict(rfmodelFit, pmlTesting)
+answers
+
+```
+
+
+
+
+##### Citation
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+
